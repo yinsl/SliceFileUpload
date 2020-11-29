@@ -72,7 +72,6 @@ public class FileUploadRunnable implements Runnable {
 
 			post.setEntity(byteArrayEntity);
 
-//			post.setEntity(new InputStreamEntity(fis, fis.getChannel().size()));
 			response = ht.execute(post);
 			if (response.getStatusLine().getStatusCode() == 200) {
 				String ret = EntityUtils.toString(response.getEntity(), "utf-8");

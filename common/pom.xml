@@ -9,7 +9,7 @@
 		<version>1.0.0</version>
 	</parent>
 
-	<artifactId>SliceFileUploadClient</artifactId>
+	<artifactId>common</artifactId>
 	<packaging>jar</packaging>
 
 	<properties>
@@ -20,18 +20,13 @@
 
 	<dependencies>
 		<dependency>
-			<groupId>com.test.upload.slice</groupId>
-			<artifactId>common</artifactId>
-			<version>1.0.0</version>
-		</dependency>
-		<dependency>
 			<groupId>org.apache.logging.log4j</groupId>
 			<artifactId>log4j-core</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>org.apache.logging.log4j</groupId>
-			<artifactId>log4j-jcl</artifactId>
-		</dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-jcl</artifactId>
+        </dependency>
 		<dependency>
 			<groupId>org.apache.httpcomponents</groupId>
 			<artifactId>httpclient</artifactId>
@@ -46,7 +41,7 @@
 		</dependency>
 	</dependencies>
 	<build>
-		<finalName>SliceFileUploadClient</finalName>
+		<finalName>common</finalName>
 		<plugins>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>

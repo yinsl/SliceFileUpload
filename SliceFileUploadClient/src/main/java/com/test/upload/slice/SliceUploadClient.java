@@ -4,7 +4,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -15,13 +14,15 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
 
+import com.test.upload.slice.utils.MD5;
+
 public class SliceUploadClient {
 
 	public static void main(String[] args) throws IOException {
 		String uploadUrl = "http://localhost:8182/upload/";
 		String mergeUrl = "http://localhost:8182/merge/";
-		String filename="TencentMeeting_0300000000_2.3.0.426.publish.exe";
-//		String filename="国六车接入详细设计文档.docx";
+//		String filename="TencentMeeting_0300000000_2.3.0.426.publish.exe";
+		String filename="国六车接入详细设计文档.docx";
 		long start = System.currentTimeMillis();
 		partFileUpload("d:/downloads/", uploadUrl,mergeUrl, filename);
 		long end = System.currentTimeMillis();
@@ -46,7 +47,8 @@ public class SliceUploadClient {
 			// partCount个线程全部处理完后 countDownLatch.await()阻塞通过
 			CountDownLatch countDownLatch = new CountDownLatch(partCount);
 			// 获取文件ID
-			String fileId = UUID.randomUUID().toString().replace("-", "");
+			String fileId = MD5.getFileMD5String(file);
+			System.out.println("fileId: " + fileId);
 			for (int i = 0; i < partCount; i++) {
 				// 当前分段起始位置
 				long partStart = i * partSize;
@@ -62,7 +64,7 @@ public class SliceUploadClient {
 			countDownLatch.await();
 			service.shutdown();
 			System.out.println("分块文件全部上传完毕");
-			System.out.println("开始请求后台拼装");
+			System.out.println("开始请求后台将临时文件拼装为源文件。");
 			CloseableHttpClient ht = HttpClientBuilder.create().build();
 			String param = fileId + "/" + partCount + "/" + fileName;
 			HttpPost post = new HttpPost(mergeUrl + param);

@@ -1,16 +1,23 @@
 package com.test.upload.slice.controller;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.Serializable;
 
 import javax.servlet.http.HttpServletRequest;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.test.upload.slice.utils.MD5;
 
 @RestController
 public class FileController {
@@ -20,6 +27,12 @@ public class FileController {
 
 	@Value("${tempFilePath}")
 	private String tempFilePath;
+	
+	@Autowired
+    private StringRedisTemplate stringRedisTemplate;
+
+    @Autowired
+    private RedisTemplate<String, Serializable> redisTemplate;
 
 	// 处理文件上传
 	@RequestMapping("/upload/{partSize}/{tempFileName}")
@@ -51,6 +64,9 @@ public class FileController {
 			return "uploading failure";
 		}
 		System.out.println(tempFileName+"上传成功!");
+		redisTemplate.opsForValue().set(tempFileName, "aaa");
+		String aaa = stringRedisTemplate.opsForValue().get(tempFileName);
+		System.out.println("aaa is " + aaa);
 		return "uploading success";
 	}
 
@@ -65,8 +81,8 @@ public class FileController {
 		try (FileOutputStream fosTemp = new FileOutputStream(filePath + fileName);) {
 			for (int i = 0; i < partCount; i++) {
 				String tempFileName = "temp" + "_" + fileId + "_" + i + ".temp";
-				String filePath = tempFilePath + tempFileName;
-				try (FileInputStream fisTemp = new FileInputStream(filePath);) {
+				String path = tempFilePath + tempFileName;
+				try (FileInputStream fisTemp = new FileInputStream(path);) {
 					int buffSize = 1024;
 					byte[] buff = new byte[buffSize];
 					int len;
@@ -75,10 +91,14 @@ public class FileController {
 					}
 				}
 			}
+			String md5 = MD5.getFileMD5String(new File(filePath + fileName));
+			System.out.println("merge file md5 " + md5);
+			System.out.println("origin file md5 " + fileId);
 		} catch (Exception e) {
 			e.printStackTrace();
 			return "failure";
 		}
+		
 		return "success";
 	}
 }
