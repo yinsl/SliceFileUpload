@@ -1,6 +1,5 @@
 package com.test.upload.slice;
 
-import java.io.File;
 import java.io.FileInputStream;
 import java.nio.ByteBuffer;
 import java.util.concurrent.CountDownLatch;
@@ -17,52 +16,38 @@ public class FileUploadRunnable implements Runnable {
 
 	private String url;
 
-	// 文件id
-	private String fileId;
-
 	// 分块编号
 	private int index;
 
 	private CountDownLatch countDownLatch;
-
-	// 当前分段大小
-	private long partSize;
-
-	// 当前分段在输入流中的起始位置
-	private long partStart;
-
-	// 总文件
-	private File file;
-
-	public FileUploadRunnable(String url, String fileId, int index, CountDownLatch countDownLatch, File file,
-			long partSize, long partStart) {
+	
+	private FileInfo fileInfo;
+	
+	public FileUploadRunnable(String url, FileInfo fileInfo, int index, CountDownLatch countDownLatch) {
 		this.url = url;
-		this.fileId = fileId;
 		this.index = index;
 		this.countDownLatch = countDownLatch;
-		this.partSize = partSize;
-		this.partStart = partStart;
-		this.file = file;
+		this.fileInfo = fileInfo;
 	}
 
 	public void run() {
 		System.out.println("第" + index + "个线程已经开始运行。");
-		try (FileInputStream fis = new FileInputStream(file);
+		try (FileInputStream fis = new FileInputStream(fileInfo.getPath());
 				CloseableHttpClient ht = HttpClientBuilder.create().build();) {
-			String tempFileName = "temp_" + fileId + "_" + index + ".temp";
-			// 请求接收分段上传的地址
-			String u = url + partSize + "/" + tempFileName;
-			System.out.println(u);
-			HttpPost post = new HttpPost(u);
+			
 			HttpResponse response;
+			long partStart = index * fileInfo.getPartSize();
 			// 跳过起始位置
 			fis.skip(partStart);
 
 			System.out.println("开始上传分块:" + index);
+			
+			// 当前分段大小 如果为最后一个大小为fileSize-partStart 其他为partSize
+			long curPartSize = (index + 1 == fileInfo.getPartCount()) ? (fileInfo.getFileSize()- partStart) : fileInfo.getPartSize();
 
-			ByteBuffer bb = ByteBuffer.allocate((int)partSize);
+			ByteBuffer bb = ByteBuffer.allocate((int)curPartSize);
 			int len = fis.getChannel().read(bb);
-			System.out.println("partSize====" + partSize);
+			System.out.println("curPartSize====" + curPartSize);
 			System.out.println("len====" + len);
 			bb.flip();
 			System.out.println("limit====" + bb.limit());
@@ -70,6 +55,11 @@ public class FileUploadRunnable implements Runnable {
 			bb.get(resultBytes);
 			ByteArrayEntity byteArrayEntity = new ByteArrayEntity(resultBytes, ContentType.APPLICATION_OCTET_STREAM);
 
+			// 请求接收分段上传的地址
+			String u = url + fileInfo.getFileId() + "/" + fileInfo.getPartCount() + "/" + fileInfo.getPartSize() + "/" + index;
+			System.out.println(u);
+			HttpPost post = new HttpPost(u);
+			
 			post.setEntity(byteArrayEntity);
 
 			response = ht.execute(post);
