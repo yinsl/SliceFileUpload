@@ -4,7 +4,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
-import java.io.Serializable;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -12,7 +11,7 @@ import javax.servlet.http.HttpServletRequest;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
@@ -29,8 +28,11 @@ public class FileController {
 	@Value("${tempFilePath}")
 	private String tempFilePath;
 
+	@Value("${tempFileCacheMillisecond}")
+	private long tempFileCacheMillisecond;
+
 	@Autowired
-	private RedisTemplate<String, Serializable> redisTemplate;
+	private StringRedisTemplate stringRedisTemplate;
 
 	/**
 	 * 处理文件上传
@@ -43,10 +45,10 @@ public class FileController {
 	 * @return
 	 * @throws InterruptedException
 	 */
-	@RequestMapping("/upload/{fileId}/{partCount}/{partSize}/{sliceIndex}")
-	public @ResponseBody String upload(@PathVariable("fileId") String fileId, @PathVariable("partCount") Long partCount,
-			@PathVariable("partSize") Long partSize, @PathVariable("sliceIndex") Integer sliceIndex,
-			HttpServletRequest req) throws InterruptedException {
+	@RequestMapping("/upload/{fileId}/{fileName}/{partCount}/{partSize}/{sliceIndex}")
+	public @ResponseBody String upload(@PathVariable("fileId") String fileId, @PathVariable("fileName") String fileName,
+			@PathVariable("partCount") Long partCount, @PathVariable("partSize") Long partSize,
+			@PathVariable("sliceIndex") Integer sliceIndex, HttpServletRequest req) throws InterruptedException {
 		int buffSize = 1024;
 		byte[] buff = new byte[buffSize];
 		String tempFileName = fileId + "_" + sliceIndex + ".temp";
@@ -82,25 +84,24 @@ public class FileController {
 			System.out.println(tempFileName + "上传失败!");
 			return "uploading failure";
 		}
-		// 更新已上传文件分片信息
-		updateUploadedSlices(fileId, sliceIndex, 2 * 24 * 60 * 60);
+		// 缓存合并后的文件名
+		stringRedisTemplate.opsForValue().setIfAbsent("fileName" + "_" + fileId, fileName);
+		stringRedisTemplate.expire("fileName" + "_" + fileId, tempFileCacheMillisecond, TimeUnit.SECONDS);
+		
+		// 缓存分片数
+		stringRedisTemplate.opsForValue().setIfAbsent("partCount" + "_" + fileId, String.valueOf(partCount));
+		stringRedisTemplate.expire("partCount" + "_" + fileId, tempFileCacheMillisecond, TimeUnit.SECONDS);
+
+		// 缓存已经上传的分片数
+		stringRedisTemplate.opsForValue().increment("uploadedSlicesCount" + "_" + fileId, 1);
+		stringRedisTemplate.expire("uploadedSlicesCount" + "_" + fileId, tempFileCacheMillisecond, TimeUnit.SECONDS);
+
+		// 缓存已上传分片的索引信息
+		stringRedisTemplate.opsForHash().put(fileId, sliceIndex, sliceIndex);
+		stringRedisTemplate.expire(fileId, tempFileCacheMillisecond, TimeUnit.SECONDS);
+
 		System.out.println(tempFileName + "上传成功!");
 		return "uploading success";
-	}
-
-	/**
-	 * 更新已上传文件分片信息
-	 * 
-	 * @param fileId
-	 * @param sliceIndex
-	 * @throws InterruptedException
-	 */
-	private void updateUploadedSlices(String key, int sliceIndex, int timeoutSeconds) throws InterruptedException {
-		redisTemplate.opsForHash().put(key, sliceIndex, sliceIndex);
-		// 两天后过期
-		redisTemplate.expire(key, timeoutSeconds, TimeUnit.SECONDS);
-		System.out.println("redis=== key:: " + key + ", field: " + sliceIndex + ", value: "
-				+ redisTemplate.opsForHash().get(key, sliceIndex));
 	}
 
 	/**
@@ -111,7 +112,7 @@ public class FileController {
 	 */
 	@RequestMapping("/uploaded/{fileId}")
 	public String uploadedSlices(@PathVariable("fileId") String fileId) {
-		Set<Object> set = redisTemplate.opsForHash().keys(fileId);
+		Set<Object> set = stringRedisTemplate.opsForHash().keys(fileId);
 		String result = null;
 		if (set != null && set.size() > 0) {
 			result = ",";
@@ -158,7 +159,7 @@ public class FileController {
 			File temp = new File(path);
 			if (temp.exists()) {
 				temp.delete();
-				redisTemplate.opsForHash().delete(fileId, i);
+				stringRedisTemplate.opsForHash().delete(fileId, i);
 			}
 		}
 
