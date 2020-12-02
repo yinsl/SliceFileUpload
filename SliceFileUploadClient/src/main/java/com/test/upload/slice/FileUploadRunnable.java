@@ -56,7 +56,7 @@ public class FileUploadRunnable implements Runnable {
 			ByteArrayEntity byteArrayEntity = new ByteArrayEntity(resultBytes, ContentType.APPLICATION_OCTET_STREAM);
 
 			// 请求接收分段上传的地址
-			String u = url + fileInfo.getFileId() + "/" + fileInfo.getPartCount() + "/" + fileInfo.getPartSize() + "/" + index;
+			String u = url + fileInfo.getFileId() + "/" + fileInfo.getPartCount() + "/" + fileInfo.getPartSize() + "/" + index + "/" + fileInfo.getFileName();
 			System.out.println(u);
 			HttpPost post = new HttpPost(u);
 			

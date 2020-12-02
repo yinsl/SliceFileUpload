@@ -52,9 +52,9 @@ public class SliceUploadClient {
 	 * 缓存客户端未上传完毕的文件信息的缓存文件
 	 */
 	private static String cacheFile = "d:/test/cache/cacheFile.txt";
-	
+
 	/**
-	 *  分片大小：1MB
+	 * 分片大小：1MB
 	 */
 	private static int partSize = 1048576;
 
@@ -62,32 +62,33 @@ public class SliceUploadClient {
 		long start = System.currentTimeMillis();
 
 		String fullFileName = "d:/downloads/TencentMeeting_0300000000_2.3.0.426.publish.exe";
-		
+//		String fullFileName = "d:/downloads/100913505181_0手把手教你学习51单片机.docx";
+
 		File file = new File(fullFileName);
 		String currentMD5 = MD5.getFileMD5String(file);
 		long currentLastModified = file.lastModified();
-		
-		//本文件是否首次上传
+
+		// 本文件是否首次上传
 		boolean isFirstUpload = true;
-		
+
 		String fileId = null;
 		String cacheFileId = null;
 		String cacheMD5 = null;
 		long cacheLastModified = 0;
-		
-		//查询本次要上传的文件信息是否已经在缓存中存在
+
+		// 查询本次要上传的文件信息是否已经在缓存中存在
 		String cacheInfo = getCacheInfo(fullFileName);
 		if (cacheInfo != null) {
 			String[] cache = cacheInfo.split(" ");
 			cacheFileId = cache[0];
 			cacheMD5 = cache[1];
 			cacheLastModified = Long.parseLong(cache[2]);
-			
-			//部分分片上传后，原始文件已经被修改过，需要删除本地缓存，当做新文件重新上传
+
+			// 部分分片上传后，原始文件已经被修改过，需要删除本地缓存，当做新文件重新上传
 			if (!currentMD5.equals(cacheMD5) || currentLastModified != cacheLastModified) {
-				deleteCacheLine(fullFileName);
+				deleteCacheLine(fullFileName.replace("/", "").replace("\\", ""));
 				fileId = UUID.randomUUID().toString().replace("-", "");
-				//缓存要上传的文件相关信息，如果本次上传未成功，下次可以从缓存中获取相关信息继续上传。
+				// 缓存要上传的文件相关信息，如果本次上传未成功，下次可以从缓存中获取相关信息继续上传。
 				saveCacheInfo(fullFileName, fileId, currentMD5, currentLastModified);
 			} else {
 				fileId = cacheFileId;
@@ -95,30 +96,30 @@ public class SliceUploadClient {
 			}
 		} else {
 			fileId = UUID.randomUUID().toString().replace("-", "");
-			//缓存要上传的文件相关信息，如果本次上传未成功，下次可以从缓存中获取相关信息继续上传。
-			saveCacheInfo(fullFileName, fileId, currentMD5, currentLastModified);
+			// 缓存要上传的文件相关信息，如果本次上传未成功，下次可以从缓存中获取相关信息继续上传。
+			saveCacheInfo(fullFileName.replace("/", "").replace("\\", ""), fileId, currentMD5, currentLastModified);
 		}
-		
-		//构建本次上传文件的基础信息
+
+		// 构建本次上传文件的基础信息
 		FileInfo fileInfo = new FileInfo(fullFileName, fileId, partSize, currentMD5);
 
-		//分片索引：0代表没有上传，为1代表已经上传
+		// 分片索引：0代表没有上传，为1代表已经上传
 		int[] partIndex = new int[fileInfo.getPartCount()];
 		if (!isFirstUpload) {
-			//查询服务器上存在的分片索引的值
+			// 查询服务器上存在的分片索引的值
 			partIndex = uploadedPartFileSearch(fileInfo);
 		}
-		
-		//分片文件上传
+
+		// 分片文件上传
 		partFileUpload(uploadUrl, fileInfo, partIndex);
 
-		//指示服务器合并文件
+		// 指示服务器合并文件
 		mergePartFile(mergeUrl, fileInfo);
 		SERVICE.shutdown();
 		long end = System.currentTimeMillis();
 		System.out.println("上传用时：" + (end - start) / 1000 + "秒");
 	}
-	
+
 	private static String getCacheInfo(String fullFileName) throws FileNotFoundException, IOException {
 		File file = new File(cacheFile);
 		if (!file.exists()) {
@@ -134,8 +135,9 @@ public class SliceUploadClient {
 		}
 		return null;
 	}
-	
-	private static void saveCacheInfo(String fullFileName, String fileId, String fileMD5, long lastModified) throws FileNotFoundException, IOException {
+
+	private static void saveCacheInfo(String fullFileName, String fileId, String fileMD5, long lastModified)
+			throws FileNotFoundException, IOException {
 		File file = new File(cacheFile);
 		if (!file.exists()) {
 			file.createNewFile();
@@ -185,7 +187,7 @@ public class SliceUploadClient {
 			String ret = EntityUtils.toString(response.getEntity(), "utf-8");
 			System.out.println(ret);
 			// 文件上传完毕，删除cacheFile中的缓存信息
-			deleteCacheLine(fileInfo.getFileId());
+			deleteCacheLine(fileInfo.getPath().replace("/", "").replace("\\", ""));
 		}
 	}
 
@@ -195,18 +197,28 @@ public class SliceUploadClient {
 		try (BufferedReader reader = new BufferedReader(new FileReader(cache));
 				PrintWriter writer = new PrintWriter(cacheTmp);) {
 			String line;
+			System.out.println(">>>>>>>>fullFileName<<<<<<<<<<<<<<<<" + fullFileName);
 			while ((line = reader.readLine()) != null) {
+				System.out.println(">>>>>>>>line<<<<<<<<<<<<<<<<" + line);
 				// 判断条件，根据自己的情况书写，会删除所有符合条件的行
-				if (line.startsWith(fullFileName)) {
+				if (line.startsWith(fullFileName.replace("/", "").replace("\\", ""))) {
+					System.out.println(">>>>>>>>删除cache行<<<<<<<<<<<<<<<<");
+					line = null;
 					continue;
 				}
+				System.out.println(">>>>>>>>write --- line<<<<<<<<<<<<<<<<" + line);
 				writer.println(line);
 				writer.flush();
 			}
-			// 删除老文件
-			cache.delete();
-			cacheTmp.renameTo(cache);
 		}
+		// 删除老文件
+					boolean isDelete = cache.delete();
+					System.out.println("isDelete " + isDelete);
+					if (isDelete) {
+						cacheTmp.renameTo(cache);
+					} else {
+						cacheTmp.delete();
+					}
 	}
 
 	public static int[] uploadedPartFileSearch(FileInfo fileInfo) throws ClientProtocolException, IOException {

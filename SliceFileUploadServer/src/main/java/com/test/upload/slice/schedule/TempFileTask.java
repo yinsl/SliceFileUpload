@@ -21,7 +21,7 @@ public class TempFileTask {
 	private String tempFilePath;
 
 	@Value("tempFileAlivesMillisecond")
-	private long tempFileAlivesMillisecond;
+	private String tempFileAlivesMillisecond;
 
 	@Autowired
 	private StringRedisTemplate stringRedisTemplate;
@@ -59,7 +59,7 @@ public class TempFileTask {
 		files = file.listFiles();
 		for (int i = 0; i < files.length; i++) {
 			File temp = files[i];
-			if (now - temp.lastModified() > tempFileAlivesMillisecond) {
+			if (now - temp.lastModified() > Long.valueOf(tempFileAlivesMillisecond)) {
 				temp.delete();
 			}
 		}
@@ -100,6 +100,7 @@ public class TempFileTask {
 			if (temp.exists()) {
 				temp.delete();
 				stringRedisTemplate.opsForHash().delete(fileId, i);
+//				stringRedisTemplate.opsForSet().remove(fileId, String.valueOf(i));
 			}
 		}
 		stringRedisTemplate.delete("fileName" + "_" + fileId);
