@@ -61,9 +61,9 @@ public class SliceUploadClient {
 	public static void main(String[] args) throws IOException {
 		long start = System.currentTimeMillis();
 
-		String fullFileName = "d:/downloads/TencentMeeting_0300000000_2.3.0.426.publish.exe";
+//		String fullFileName = "d:/downloads/TencentMeeting_0300000000_2.3.0.426.publish.exe";
 //		String fullFileName = "d:/downloads/100913505181_0手把手教你学习51单片机.docx";
-
+		String fullFileName = "d:/downloads/20190911-语音误识别.MOV";
 		File file = new File(fullFileName);
 		String currentMD5 = MD5.getFileMD5String(file);
 		long currentLastModified = file.lastModified();
@@ -97,7 +97,7 @@ public class SliceUploadClient {
 		} else {
 			fileId = UUID.randomUUID().toString().replace("-", "");
 			// 缓存要上传的文件相关信息，如果本次上传未成功，下次可以从缓存中获取相关信息继续上传。
-			saveCacheInfo(fullFileName.replace("/", "").replace("\\", ""), fileId, currentMD5, currentLastModified);
+			saveCacheInfo(fullFileName, fileId, currentMD5, currentLastModified);
 		}
 
 		// 构建本次上传文件的基础信息
@@ -146,7 +146,8 @@ public class SliceUploadClient {
 			if (file.length() > 0) {
 				fos.write("\r\n".getBytes());
 			}
-			fos.write((fullFileName + " " + fileId + " " + fileMD5 + " " + lastModified).getBytes());
+			fos.write((fullFileName.replace("/", "").replace("\\", "") + " " + fileId + " " + fileMD5 + " "
+					+ lastModified).getBytes());
 		}
 	}
 
@@ -168,7 +169,6 @@ public class SliceUploadClient {
 			}
 			// 阻塞直至countDownLatch.countDown()被调用partCount次 即所有线程执行任务完毕
 			countDownLatch.await();
-
 			System.out.println("分块文件全部上传完毕");
 		} catch (InterruptedException e) {
 			e.printStackTrace();
@@ -184,10 +184,8 @@ public class SliceUploadClient {
 		HttpPost post = new HttpPost(mergeUrl + param);
 		HttpResponse response = ht.execute(post);
 		if (response.getStatusLine().getStatusCode() == 200) {
-			String ret = EntityUtils.toString(response.getEntity(), "utf-8");
-			System.out.println(ret);
 			// 文件上传完毕，删除cacheFile中的缓存信息
-			deleteCacheLine(fileInfo.getPath().replace("/", "").replace("\\", ""));
+			deleteCacheLine(fileInfo.getPath());
 		}
 	}
 
@@ -197,28 +195,23 @@ public class SliceUploadClient {
 		try (BufferedReader reader = new BufferedReader(new FileReader(cache));
 				PrintWriter writer = new PrintWriter(cacheTmp);) {
 			String line;
-			System.out.println(">>>>>>>>fullFileName<<<<<<<<<<<<<<<<" + fullFileName);
 			while ((line = reader.readLine()) != null) {
-				System.out.println(">>>>>>>>line<<<<<<<<<<<<<<<<" + line);
 				// 判断条件，根据自己的情况书写，会删除所有符合条件的行
 				if (line.startsWith(fullFileName.replace("/", "").replace("\\", ""))) {
-					System.out.println(">>>>>>>>删除cache行<<<<<<<<<<<<<<<<");
 					line = null;
 					continue;
 				}
-				System.out.println(">>>>>>>>write --- line<<<<<<<<<<<<<<<<" + line);
 				writer.println(line);
 				writer.flush();
 			}
 		}
 		// 删除老文件
-					boolean isDelete = cache.delete();
-					System.out.println("isDelete " + isDelete);
-					if (isDelete) {
-						cacheTmp.renameTo(cache);
-					} else {
-						cacheTmp.delete();
-					}
+		boolean isDelete = cache.delete();
+		if (isDelete) {
+			cacheTmp.renameTo(cache);
+		} else {
+			cacheTmp.delete();
+		}
 	}
 
 	public static int[] uploadedPartFileSearch(FileInfo fileInfo) throws ClientProtocolException, IOException {
@@ -228,8 +221,6 @@ public class SliceUploadClient {
 		int[] result = new int[fileInfo.getPartCount()];
 		if (response.getStatusLine().getStatusCode() == 200) {
 			String ret = EntityUtils.toString(response.getEntity(), "utf-8");
-			System.out.println(ret);
-
 			if (ret != null && ret.trim().length() > 0) {
 				for (int i = 0; i < result.length; i++) {
 					if (ret.contains("," + i + ",")) {

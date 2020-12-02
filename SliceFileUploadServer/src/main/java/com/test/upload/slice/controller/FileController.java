@@ -67,7 +67,6 @@ public class FileController {
 				if (len == -1) {
 					break;
 				}
-				System.out.println("========len======" + len);
 				// temp用于临界判断
 				int temp = hasReaded + len;
 				if (temp >= partSize) {
@@ -85,26 +84,18 @@ public class FileController {
 		// 缓存合并后的文件名
 		stringRedisTemplate.opsForValue().setIfAbsent("fileName" + "_" + fileId, fileName);
 		stringRedisTemplate.expire("fileName" + "_" + fileId, tempFileCacheMillisecond, TimeUnit.SECONDS);
-		System.out.println("redis fileName: " + stringRedisTemplate.opsForValue().get("fileName" + "_" + fileId));
 		
 		// 缓存分片数
 		stringRedisTemplate.opsForValue().setIfAbsent("partCount" + "_" + fileId, String.valueOf(partCount));
 		stringRedisTemplate.expire("partCount" + "_" + fileId, tempFileCacheMillisecond, TimeUnit.SECONDS);
-		System.out.println("redis partCount: " + stringRedisTemplate.opsForValue().get("partCount" + "_" + fileId));
 		
 		// 缓存已经上传的分片数
 		stringRedisTemplate.opsForValue().increment("uploadedSlicesCount" + "_" + fileId, 1);
 		stringRedisTemplate.expire("uploadedSlicesCount" + "_" + fileId, tempFileCacheMillisecond, TimeUnit.SECONDS);
-		System.out.println("redis uploadedSlicesCount: " + stringRedisTemplate.opsForValue().get("uploadedSlicesCount" + "_" + fileId));
 
 		// 缓存已上传分片的索引信息
 		stringRedisTemplate.opsForHash().put(fileId, sliceIndex.toString(), sliceIndex.toString());
-//		stringRedisTemplate.opsForSet().add(fileId, String.valueOf(sliceIndex));
 		stringRedisTemplate.expire(fileId, tempFileCacheMillisecond, TimeUnit.SECONDS);
-//		Set<String> values = stringRedisTemplate.opsForSet().members(fileId);
-//		for (String v : values) {
-//			System.out.println("index: " + v);
-//		}
 
 		System.out.println(tempFileName + "上传成功!");
 		return "uploading success";
@@ -126,15 +117,7 @@ public class FileController {
 				result += o.toString() + ",";
 			}
 		}
-//		System.out.println(fileId);
-//		redisTemplate.opsForSet().add(fileId, "test");
-//		Set<String> values = redisTemplate.opsForSet().members(fileId);
-//		if (values != null) {
-//			result = ",";
-//		}
-//		for (String v : values) {
-//			result += v + ",";
-//		}
+
 		System.out.println(result);
 		return result;
 	}
@@ -172,10 +155,8 @@ public class FileController {
 			if (temp.exists()) {
 				temp.delete();
 				stringRedisTemplate.opsForHash().delete(fileId, String.valueOf(i));
-//				stringRedisTemplate.opsForSet().remove(fileId, String.valueOf(i));
 			}
 		}
-		
 		return "success";
 	}
 }
