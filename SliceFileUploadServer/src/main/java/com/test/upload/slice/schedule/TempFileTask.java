@@ -17,6 +17,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class TempFileTask {
 
+	@Value("${filePath}")
+	private String filePath;
+	
 	@Value("${tempFilePath}")
 	private String tempFilePath;
 
@@ -24,7 +27,7 @@ public class TempFileTask {
 	private String tempFileAlivesMillisecond;
 
 	@Autowired
-	private StringRedisTemplate stringRedisTemplate;
+	private StringRedisTemplate redisTemplate;
 
 	/**
 	 * 每天0点执行一次，合并所有分片已经正确上传的文件并删除最后更新日期在5天前的临时文件
@@ -41,18 +44,18 @@ public class TempFileTask {
 
 		// 查找可以合并的临时文件列表
 		for (int i = 0; i < files.length; i++) {
-			String fileId = files[i].getName().substring(0, 32);
-			String partCount = stringRedisTemplate.opsForValue().get("partCount" + "_" + fileId);
-			String uploadedSlicesCount = stringRedisTemplate.opsForValue().get("uploadedSlicesCount" + "_" + fileId);
+			String eventId = files[i].getName().substring(0, 32);
+			Object totalSlices = redisTemplate.opsForHash().get(eventId, "totalSlices");
+			Object totalUploadedSlices = redisTemplate.opsForHash().get(eventId, "totalUploadedSlices");
 			// 分片总数和已上传分片数相同，说明上传结束，可以合并文件
-			if (partCount != null && partCount.equals(uploadedSlicesCount)) {
-				cacheMap.put(fileId, Integer.valueOf(partCount));
+			if (totalSlices != null && totalUploadedSlices != null && totalSlices.toString().equals(totalUploadedSlices.toString())) {
+				cacheMap.put(eventId, Integer.parseInt(totalSlices.toString()));
 			}
 		}
 
 		//对可以合并的临时文件执行合并操作
-		for (String fileId : cacheMap.keySet()) {
-			mergeFile(fileId, cacheMap.get(fileId));
+		for (String eventId : cacheMap.keySet()) {
+			mergeFile(eventId, cacheMap.get(eventId));
 		}
 
 		//对超过存储时间的临时文件执行清理操作
@@ -68,44 +71,42 @@ public class TempFileTask {
 	/**
 	 * 合并文件，删除临时文件和相关缓存信息
 	 * 
-	 * @param fileId
-	 * @param partCount
+	 * @param eventId
+	 * @param totalSlices
 	 * @throws IOException 
 	 * @throws FileNotFoundException 
 	 */
-	private void mergeFile(String fileId, int partCount) throws FileNotFoundException, IOException {
-		String fileName = stringRedisTemplate.opsForValue().get("fileName" + "_" + fileId);
+	private void mergeFile(String eventId, int totalSlices) throws FileNotFoundException, IOException {
+		Object fileName = redisTemplate.opsForHash().get(eventId, "fileName");
 		if (fileName == null) {
 			return;
 		}
-		try (FileOutputStream fosTemp = new FileOutputStream(tempFilePath + fileName);) {
-			for (int i = 0; i < partCount; i++) {
-				String tempFileName = fileId + "_" + i + ".temp";
+		try (FileOutputStream fos = new FileOutputStream(filePath + fileName);) {
+			for (int i = 0; i < totalSlices; i++) {
+				String tempFileName = eventId + "_" + i + ".temp";
 				String path = tempFilePath + tempFileName;
 				try (FileInputStream fisTemp = new FileInputStream(path);) {
 					int buffSize = 1024;
 					byte[] buff = new byte[buffSize];
 					int len;
 					while ((len = fisTemp.read(buff)) != -1) {
-						fosTemp.write(buff, 0, len);
+						fos.write(buff, 0, len);
 					}
 				}
 			}
 		}
-		// 文件合并完毕，删除临时文件和缓存
-		for (int i = 0; i < partCount; i++) {
-			String tempFileName = fileId + "_" + i + ".temp";
+		// 文件合并完毕，删除临时文件
+		for (int i = 0; i < totalSlices; i++) {
+			String tempFileName = eventId + "_" + i + ".temp";
 			String path = tempFilePath + tempFileName;
 			File temp = new File(path);
 			if (temp.exists()) {
 				temp.delete();
-				stringRedisTemplate.opsForHash().delete(fileId, i);
-//				stringRedisTemplate.opsForSet().remove(fileId, String.valueOf(i));
 			}
 		}
-		stringRedisTemplate.delete("fileName" + "_" + fileId);
-		stringRedisTemplate.delete("partCount" + "_" + fileId);
-		stringRedisTemplate.delete("uploadedSlicesCount" + "_" + fileId);
+		
+		//删除缓存
+		redisTemplate.delete(eventId);
 	}
 
 }
