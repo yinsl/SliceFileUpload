@@ -36,7 +36,6 @@ public class TempFileTask {
 	 */
 	@Scheduled(cron = "0 0 0 * * ?")
 	public void cleanTempFiles() throws FileNotFoundException, IOException {
-		long now = System.currentTimeMillis();
 		File file = new File(tempFilePath);
 		File[] files = file.listFiles();
 
@@ -62,7 +61,9 @@ public class TempFileTask {
 		files = file.listFiles();
 		for (int i = 0; i < files.length; i++) {
 			File temp = files[i];
-			if (now - temp.lastModified() > Long.valueOf(tempFileAlivesMillisecond)) {
+			String eventId = temp.getName().split("_")[0];
+			boolean cacheExist = redisTemplate.hasKey(eventId);
+			if (!cacheExist) {
 				temp.delete();
 			}
 		}

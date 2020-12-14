@@ -171,7 +171,6 @@ public class FileController {
 	 * 查询未上传文件分片信息
 	 * 
 	 * @param eventId 文件ID
-	 * @return 分片格式：“,1,3,4,7,”，即分片前后都用逗号分隔，其中的分片为已经上传的分片索引。
 	 */
 	@RequestMapping("/unUploaded/{eventId}")
 	public @ResponseBody SliceUploadFileInfo uploadedSlices(@PathVariable("eventId") String eventId) {
