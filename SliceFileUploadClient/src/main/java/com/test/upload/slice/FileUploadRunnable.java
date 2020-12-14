@@ -14,7 +14,7 @@ import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
 import org.bouncycastle.util.encoders.Base64;
 
-import com.test.upload.slice.dto.UploadAuthInfo;
+import com.test.upload.slice.dto.SliceUploadFileInfo;
 import com.test.upload.slice.utils.AESUtil;
 
 public class FileUploadRunnable implements Runnable {
@@ -28,10 +28,10 @@ public class FileUploadRunnable implements Runnable {
 	
 	private File file;
 
-	private UploadAuthInfo authInfo;
+	private SliceUploadFileInfo authInfo;
 
 	public FileUploadRunnable(String url, File file, int index, CountDownLatch countDownLatch,
-			UploadAuthInfo authInfo) {
+			SliceUploadFileInfo authInfo) {
 		this.url = url;
 		this.index = index;
 		this.countDownLatch = countDownLatch;

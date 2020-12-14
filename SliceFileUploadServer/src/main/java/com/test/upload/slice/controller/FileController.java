@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.test.upload.slice.dto.UploadAuthInfo;
+import com.test.upload.slice.dto.SliceUploadFileInfo;
 import com.test.upload.slice.utils.AESUtil;
 
 /**
@@ -45,35 +45,47 @@ public class FileController {
 	@Autowired
 	private RedisTemplate<String, ?> redisTemplate;
 
+	/**
+	 * 获取文件上传鉴权参数
+	 * 
+	 * @param fileName
+	 * @param fileMD5
+	 * @param fileSize
+	 * @return
+	 * @throws Exception
+	 */
 	@RequestMapping("/uploadAuth/{fileMD5}/{fileSize}/{fileName}")
-	public @ResponseBody UploadAuthInfo uploadFileInfo(@PathVariable("fileName") String fileName,
-			@PathVariable("fileMD5") String fileMD5, @PathVariable("fileSize") long fileSize, HttpServletRequest req)
-			throws Exception {
+	public @ResponseBody SliceUploadFileInfo uploadFileInfo(@PathVariable("fileName") String fileName,
+			@PathVariable("fileMD5") String fileMD5, @PathVariable("fileSize") long fileSize) throws Exception {
+
 		byte[] aesKey = AESUtil.generateDesKey128();
 		String token = UUID.randomUUID().toString().replace("-", "");
 		String eventId = UUID.randomUUID().toString().replace("-", "");
 		String base64AesKey = Base64.encodeBase64String(aesKey);
+
+		// 分片总数
+		int totalSlices = (int) (fileSize / sliceSize);
+		if (sliceSize * totalSlices < fileSize) {
+			totalSlices++;
+		}
+
+		int[] unUploadedSliceIndexes = new int[totalSlices];
+
+		for (int i = 0; i < totalSlices; i++) {
+			unUploadedSliceIndexes[i] = i;
+		}
+
 		redisTemplate.opsForHash().put(eventId, "aesKey", base64AesKey);
 		redisTemplate.opsForHash().put(eventId, "token", token);
 		redisTemplate.opsForHash().put(eventId, "fileSize", fileSize);
 		redisTemplate.opsForHash().put(eventId, "fileMD5", fileMD5);
 		redisTemplate.opsForHash().put(eventId, "fileName", fileName);
 		redisTemplate.opsForHash().put(eventId, "sliceSize", sliceSize);
-
-		long totalSlices = 0;
-
-		// 分多少段
-		totalSlices = (int) (fileSize / sliceSize);
-		if (sliceSize * totalSlices < fileSize) {
-			totalSlices++;
-		}
-
-		// 缓存分片总数
 		redisTemplate.opsForHash().put(eventId, "totalSlices", totalSlices);
 
 		redisTemplate.expire(eventId, tempFileCacheMillisecond, TimeUnit.SECONDS);
 
-		return new UploadAuthInfo(eventId, base64AesKey, token, sliceSize);
+		return new SliceUploadFileInfo(eventId, base64AesKey, token, sliceSize, unUploadedSliceIndexes);
 	}
 
 	/**
@@ -142,8 +154,8 @@ public class FileController {
 		redisTemplate.opsForHash().increment(eventId, "totalUploadedSlices", 1);
 
 		// 缓存已上传分片的索引信息
-		redisTemplate.opsForHash().put(eventId + "_sliceIndex", sliceIndex.toString(), sliceIndex.toString());
-		redisTemplate.expire(eventId + "_sliceIndex", tempFileCacheMillisecond, TimeUnit.SECONDS);
+		redisTemplate.opsForHash().put(eventId + "_uploadedSliceIndexes", sliceIndex.toString(), sliceIndex.toString());
+		redisTemplate.expire(eventId + "_uploadedSliceIndexes", tempFileCacheMillisecond, TimeUnit.SECONDS);
 
 		int totalSlices = Integer.parseInt(redisTemplate.opsForHash().get(eventId, "totalSlices").toString());
 		int totalUploadedSlices = Integer
@@ -156,22 +168,39 @@ public class FileController {
 	}
 
 	/**
-	 * 查询已经上传的分片
+	 * 查询未上传文件分片信息
 	 * 
 	 * @param eventId 文件ID
 	 * @return 分片格式：“,1,3,4,7,”，即分片前后都用逗号分隔，其中的分片为已经上传的分片索引。
 	 */
-	@RequestMapping("/uploaded/{eventId}")
-	public String uploadedSlices(@PathVariable("eventId") String eventId) {
-		String result = null;
-		Set<Object> set = redisTemplate.opsForHash().keys(eventId + "_sliceIndex");
+	@RequestMapping("/unUploaded/{eventId}")
+	public @ResponseBody SliceUploadFileInfo uploadedSlices(@PathVariable("eventId") String eventId) {
+		SliceUploadFileInfo sufi = null;
+		Set<Object> set = redisTemplate.opsForHash().keys(eventId + "_uploadedSliceIndexes");
+		
 		if (set != null && set.size() > 0) {
-			result = ",";
+			Integer totalSlices = (Integer) redisTemplate.opsForHash().get(eventId, "totalSlices");
+			
+			int[] sliceIndexes = new int[totalSlices];
 			for (Object o : set) {
-				result += o.toString() + ",";
+				//已经上传的设为1
+				sliceIndexes[Integer.parseInt(o.toString())] = 1;
 			}
+
+			int[] unUploadedIndexes = new int[totalSlices - set.size()];
+			for (int i = 0, j = 0; i < totalSlices; i++) {
+				if (sliceIndexes[i] == 0) {
+					unUploadedIndexes[j] = i;
+					j++;
+				}
+			}
+			
+			String aesKey = redisTemplate.opsForHash().get(eventId, "aesKey").toString();
+			String token = redisTemplate.opsForHash().get(eventId, "token").toString();
+			Integer sliceSize = Integer.parseInt(redisTemplate.opsForHash().get(eventId, "sliceSize").toString());
+			sufi = new SliceUploadFileInfo(eventId, aesKey, token, sliceSize, unUploadedIndexes);
 		}
-		return result;
+		return sufi;
 	}
 
 	/**

@@ -1,23 +1,30 @@
 package com.test.upload.slice.dto;
 
-public class UploadAuthInfo {
-	
+public class SliceUploadFileInfo {
+
 	private String eventId;
-	
+
 	private String aeskey;
-	
+
 	private String token;
-	
+
 	/**
 	 * 分片大小，默认1MB
 	 */
 	private int sliceSize = 1048576;
-	
-	public UploadAuthInfo(String eventId, String aeskey, String token, int sliceSize) {
+
+	/**
+	 * 未上传的分片索引
+	 */
+	private int[] unUploadedIndexes;
+
+	public SliceUploadFileInfo(String eventId, String aeskey, String token, int sliceSize,
+			int[] unUploadedIndexes) {
 		this.eventId = eventId;
 		this.aeskey = aeskey;
 		this.token = token;
 		this.sliceSize = sliceSize;
+		this.unUploadedIndexes = unUploadedIndexes;
 	}
 
 	public int getSliceSize() {
@@ -50,6 +57,14 @@ public class UploadAuthInfo {
 
 	public void setToken(String token) {
 		this.token = token;
+	}
+
+	public int[] getUnUploadedIndexes() {
+		return unUploadedIndexes;
+	}
+
+	public void setUnUploadedIndexes(int[] unUploadedIndexes) {
+		this.unUploadedIndexes = unUploadedIndexes;
 	}
 
 }
