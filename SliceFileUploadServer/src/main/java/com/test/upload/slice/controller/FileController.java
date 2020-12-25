@@ -20,8 +20,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.test.upload.slice.constant.UploadStatus;
 import com.test.upload.slice.dto.SliceUploadFileInfo;
 import com.test.upload.slice.utils.AESUtil;
+import com.test.upload.slice.utils.MD5;
 
 /**
  * 文件分片上传
@@ -42,6 +44,9 @@ public class FileController {
 	@Value("${sliceSize}")
 	private int sliceSize;
 
+	@Value("${intervalTime}")
+	private int intervalTime;
+
 	@Autowired
 	private RedisTemplate<String, ?> redisTemplate;
 
@@ -54,9 +59,10 @@ public class FileController {
 	 * @return
 	 * @throws Exception
 	 */
-	@RequestMapping("/uploadAuth/{fileMD5}/{fileSize}/{fileName}")
+	@RequestMapping("/uploadAuth/{vin}/{fileMD5}/{fileSize}/{fileName}")
 	public @ResponseBody SliceUploadFileInfo uploadFileInfo(@PathVariable("fileName") String fileName,
-			@PathVariable("fileMD5") String fileMD5, @PathVariable("fileSize") long fileSize) throws Exception {
+			@PathVariable("fileMD5") String fileMD5, @PathVariable("vin") String vin,
+			@PathVariable("fileSize") long fileSize) throws Exception {
 
 		byte[] aesKey = AESUtil.generateDesKey128();
 		String token = UUID.randomUUID().toString().replace("-", "");
@@ -82,10 +88,14 @@ public class FileController {
 		redisTemplate.opsForHash().put(eventId, "fileName", fileName);
 		redisTemplate.opsForHash().put(eventId, "sliceSize", sliceSize);
 		redisTemplate.opsForHash().put(eventId, "totalSlices", totalSlices);
+		redisTemplate.opsForHash().put(eventId, "intervalTime", intervalTime);
+		redisTemplate.opsForHash().put(eventId, "vin", vin);
+		//值为0表示上传中，值为1表示上传成功，值为2
+		redisTemplate.opsForHash().put(eventId, "uploadStatus", UploadStatus.UPLOADING);
 
 		redisTemplate.expire(eventId, tempFileCacheMillisecond, TimeUnit.SECONDS);
 
-		return new SliceUploadFileInfo(eventId, base64AesKey, token, sliceSize, unUploadedSliceIndexes);
+		return new SliceUploadFileInfo(eventId, base64AesKey, token, sliceSize, unUploadedSliceIndexes,intervalTime);
 	}
 
 	/**
@@ -173,16 +183,16 @@ public class FileController {
 	 * @param eventId 文件ID
 	 */
 	@RequestMapping("/unUploaded/{eventId}")
-	public @ResponseBody SliceUploadFileInfo uploadedSlices(@PathVariable("eventId") String eventId) {
+	public @ResponseBody SliceUploadFileInfo unUploadedSlices(@PathVariable("eventId") String eventId) {
 		SliceUploadFileInfo sufi = null;
 		Set<Object> set = redisTemplate.opsForHash().keys(eventId + "_uploadedSliceIndexes");
-		
+
 		if (set != null && set.size() > 0) {
 			Integer totalSlices = (Integer) redisTemplate.opsForHash().get(eventId, "totalSlices");
-			
+
 			int[] sliceIndexes = new int[totalSlices];
 			for (Object o : set) {
-				//已经上传的设为1
+				// 已经上传的设为1
 				sliceIndexes[Integer.parseInt(o.toString())] = 1;
 			}
 
@@ -193,11 +203,12 @@ public class FileController {
 					j++;
 				}
 			}
-			
+
 			String aesKey = redisTemplate.opsForHash().get(eventId, "aesKey").toString();
 			String token = redisTemplate.opsForHash().get(eventId, "token").toString();
 			Integer sliceSize = Integer.parseInt(redisTemplate.opsForHash().get(eventId, "sliceSize").toString());
-			sufi = new SliceUploadFileInfo(eventId, aesKey, token, sliceSize, unUploadedIndexes);
+			int intervalTime = Integer.parseInt(redisTemplate.opsForHash().get(eventId, "intervalTime").toString());
+			sufi = new SliceUploadFileInfo(eventId, aesKey, token, sliceSize, unUploadedIndexes, intervalTime);
 		}
 		return sufi;
 	}
@@ -223,11 +234,27 @@ public class FileController {
 					}
 				}
 			}
+			File mergedFile = new File(filePath + fileName);
+			String currentMD5 = MD5.getFileMD5String(mergedFile);
+			String cacheMD5 = redisTemplate.opsForHash().get(eventId, "fileMD5").toString();
+			if (!cacheMD5.equals(currentMD5)) {
+				mergedFile.delete();
+				return "failure";
+			}
 		} catch (Exception e) {
 			e.printStackTrace();
 			return "failure";
 		}
 		// 文件合并完毕，删除临时文件
+		cleanSlices(eventId);
+		redisTemplate.opsForHash().put(eventId, "uploadStatus", UploadStatus.SUCCESS);
+		return "success";
+	}
+
+	@RequestMapping("/cleanSlices/{eventId}")
+	public String cleanSlices(String eventId) {
+		Integer totalSlices = Integer.parseInt(redisTemplate.opsForHash().get(eventId, "totalSlices").toString());
+		// 删除临时文件
 		for (int i = 0; i < totalSlices; i++) {
 			String tempFileName = eventId + "_" + i + ".temp";
 			String path = tempFilePath + tempFileName;
@@ -236,8 +263,14 @@ public class FileController {
 				temp.delete();
 			}
 		}
-		// 删除缓存
-		redisTemplate.delete(eventId);
+		redisTemplate.opsForHash().put(eventId, "uploadStatus", UploadStatus.FAIL);
 		return "success";
 	}
+	
+	@RequestMapping("/uploadStatus/{eventId}")
+	public String uploadStatus(String eventId) {
+		UploadStatus uploadStatus = (UploadStatus)redisTemplate.opsForHash().get(eventId, "uploadStatus");
+		return uploadStatus == null ? UploadStatus.NOTFOUND.getName() : uploadStatus.getName();
+	}
+	
 }

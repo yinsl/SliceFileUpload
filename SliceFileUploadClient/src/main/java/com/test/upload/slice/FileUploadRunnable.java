@@ -29,14 +29,17 @@ public class FileUploadRunnable implements Runnable {
 	private File file;
 
 	private SliceUploadFileInfo authInfo;
+	
+	private String bizType;
 
 	public FileUploadRunnable(String url, File file, int index, CountDownLatch countDownLatch,
-			SliceUploadFileInfo authInfo) {
+			SliceUploadFileInfo authInfo, String bizType) {
 		this.url = url;
 		this.index = index;
 		this.countDownLatch = countDownLatch;
 		this.authInfo = authInfo;
 		this.file = file;
+		this.bizType = bizType;
 	}
 
 	public void run() {
@@ -76,6 +79,7 @@ public class FileUploadRunnable implements Runnable {
 
 			post.setHeader("eventId", authInfo.getEventId());
 			post.setHeader("token", authInfo.getToken());
+			post.setHeader("bizType", bizType);
 
 			post.setEntity(byteArrayEntity);
 

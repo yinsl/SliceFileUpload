@@ -17,14 +17,20 @@ public class SliceUploadFileInfo {
 	 * 未上传的分片索引
 	 */
 	private int[] unUploadedIndexes;
+	
+	/**
+	 * 分片文件上传的间隔时间，单位：秒。如果值为-1表示可以并发上传分片文件
+	 */
+	private int intervalTime;
 
 	public SliceUploadFileInfo(String eventId, String aeskey, String token, int sliceSize,
-			int[] unUploadedIndexes) {
+			int[] unUploadedIndexes, int intervalTime) {
 		this.eventId = eventId;
 		this.aeskey = aeskey;
 		this.token = token;
 		this.sliceSize = sliceSize;
 		this.unUploadedIndexes = unUploadedIndexes;
+		this.intervalTime = intervalTime;
 	}
 
 	public int getSliceSize() {
@@ -65,6 +71,14 @@ public class SliceUploadFileInfo {
 
 	public void setUnUploadedIndexes(int[] unUploadedIndexes) {
 		this.unUploadedIndexes = unUploadedIndexes;
+	}
+
+	public int getIntervalTime() {
+		return intervalTime;
+	}
+
+	public void setIntervalTime(int intervalTime) {
+		this.intervalTime = intervalTime;
 	}
 
 }

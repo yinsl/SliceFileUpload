@@ -47,66 +47,84 @@ public class SliceUploadClient {
 	private static String unUploadedUrl = "http://localhost:8182/unUploaded/";
 
 	/**
+	 * 请求服务端删除已经上传的分片文件
+	 */
+	private static String cleanSlicesUrl = "http://localhost:8182/cleanSlices/";
+	
+	/**
+	 * 查询上传状态
+	 */
+//	private static String uploadStatusUrl = "http://localhost:8182/uploadStatus/";
+	
+	/**
 	 * 缓存客户端未上传完毕的文件信息的缓存文件
 	 */
 	private static String cacheFile = "d:\\test\\cache\\cacheFile.txt";
 
 	public static void main(String[] args) throws IOException {
+
+		String vin = "vin_test";
 		
+		//业务类型
+		String bizType = "FOTA";
+
 		// 历史文件上传，每次联网都要重新查看本地缓存，看是否有没有上传完毕的文件。
-		historyFileUpload();
+//		historyFileUpload(vin, bizType);
 
 		// 新文件上传
-		newFileUpload();
+		newFileUpload(vin, bizType);
 	}
-	
+
 	/**
 	 * 文件首次上传处理
+	 * 
 	 * @throws IOException
 	 */
-	private static void newFileUpload() throws IOException {
+	private static void newFileUpload(String vin, String bizType) throws IOException {
 		long start = System.currentTimeMillis();
-		
+
 		// 新文件上传
-				String path = "d:\\downloads\\TencentMeeting_0300000000_2.3.0.426.publish.exe";
+//				String path = "d:\\downloads\\TencentMeeting_0300000000_2.3.0.426.publish.exe";
 //				String path = "d:\\downloads\\100913505181_0手把手教你学习51单片机.docx";
 //				String path = "d:\\downloads\\20190911-语音误识别.MOV";
 //				String path = "d:\\downloads\\国六车接入详细设计文档 - 副本.docx";
-				File file = new File(path);
-				String currentMD5 = MD5.getFileMD5String(file);
-				long currentLastModified = file.lastModified();
+		String path = "d:/downloads/Report.xls";
+		File file = new File(path);
+		String currentMD5 = MD5.getFileMD5String(file);
+		long currentLastModified = file.lastModified();
 
-				String eventId = null;
+		String eventId = null;
 
-				SliceUploadFileInfo sliceUploadFileInfo = null;
+		SliceUploadFileInfo sliceUploadFileInfo = null;
 
-				// 新文件上传
-				sliceUploadFileInfo = getUploadAuth(file.getName(), currentMD5, file.length());
-				if (sliceUploadFileInfo != null) {
-					eventId = sliceUploadFileInfo.getEventId();
-					CacheInfo cacheInfo = new CacheInfo(eventId, currentMD5, currentLastModified, path);
-					// 缓存要上传的文件相关信息，如果本次上传未成功，下次可以从缓存中获取相关信息继续上传。
-					saveCacheInfo(cacheInfo);
-				} else {
-					// 云端出错
-					return;
-				}
+		// 新文件上传
+		sliceUploadFileInfo = getUploadAuth(vin, file.getName(), currentMD5, file.length());
+		if (sliceUploadFileInfo != null) {
+			eventId = sliceUploadFileInfo.getEventId();
+			CacheInfo cacheInfo = new CacheInfo(eventId, currentMD5, currentLastModified, path);
+			// 缓存要上传的文件相关信息，如果本次上传未成功，下次可以从缓存中获取相关信息继续上传。
+			saveCacheInfo(cacheInfo);
+		} else {
+			// 云端出错
+			return;
+		}
 
-				// 分片文件上传
-				sliceFileUpload(uploadUrl, file, sliceUploadFileInfo.getUnUploadedIndexes(), sliceUploadFileInfo);
+		// 分片文件上传
+		sliceFileUpload(uploadUrl, file, sliceUploadFileInfo.getUnUploadedIndexes(), sliceUploadFileInfo, bizType);
 
-				long end = System.currentTimeMillis();
-				System.out.println("新文件上传用时：" + (end - start) / 1000 + "秒");
+		long end = System.currentTimeMillis();
+		System.out.println("新文件上传用时：" + (end - start) / 1000 + "秒");
 	}
 
 	/**
 	 * 未上传完的所有文件都在此继续上传
+	 * 
 	 * @throws FileNotFoundException
 	 * @throws IOException
 	 */
-	private static void historyFileUpload() throws FileNotFoundException, IOException {
+	public static void historyFileUpload(String vin, String bizType) throws FileNotFoundException, IOException {
 		long start = System.currentTimeMillis();
-		
+
 		SliceUploadFileInfo sliceUploadFileInfo = null;
 
 		// 查询本地缓存中未上传的所有文件信息
@@ -123,10 +141,12 @@ public class SliceUploadClient {
 
 				// 部分分片上传后，原始文件已经被修改过，需要删除本地缓存，重新上传整个文件
 				if (!currentMD5.equals(cacheInfo.getMd5()) || currentLastModified != cacheInfo.getLastModified()) {
-					//删除本地缓存
+					// 删除本地缓存
 					deleteCacheLine(cacheInfo.getEventId());
+					// 删除云端已经上传的分片文件
+					cleanSlices(cacheInfo.getEventId());
 					// 新文件上传
-					sliceUploadFileInfo = getUploadAuth(file.getName(), currentMD5, file.length());
+					sliceUploadFileInfo = getUploadAuth(vin, file.getName(), currentMD5, file.length());
 					if (sliceUploadFileInfo != null) {
 						// 缓存要上传的文件相关信息，如果本次上传未成功，下次可以从缓存中获取相关信息继续上传。
 						cacheInfo.setMd5(currentMD5);
@@ -134,23 +154,23 @@ public class SliceUploadClient {
 						saveCacheInfo(cacheInfo);
 						// 分片文件上传
 						sliceFileUpload(uploadUrl, file, sliceUploadFileInfo.getUnUploadedIndexes(),
-								sliceUploadFileInfo);
+								sliceUploadFileInfo, bizType);
 					} else {
 						// 云端出错
 						continue;
 					}
 				} else {
 					// 文件在上次上传一部分后没有被修改，可以继续上传
-					
+
 					// 查询服务器上的文件缓存信息
 					sliceUploadFileInfo = unUploadedSliceFileSearch(cacheInfo.getEventId());
-					
+
 					if (sliceUploadFileInfo == null) {
 						// 该文件已经超过允许的上传时间，整个文件按上传失败处理
 						continue;
 					}
 					// 分片文件上传
-					sliceFileUpload(uploadUrl, file, sliceUploadFileInfo.getUnUploadedIndexes(), sliceUploadFileInfo);
+					sliceFileUpload(uploadUrl, file, sliceUploadFileInfo.getUnUploadedIndexes(), sliceUploadFileInfo, bizType);
 				}
 			}
 		}
@@ -169,7 +189,7 @@ public class SliceUploadClient {
 			String line;
 			while ((line = reader.readLine()) != null) {
 				String[] cache = line.split(" ");
-				String path = "";//处理文件名中的空格
+				String path = "";// 处理文件名中的空格
 				for (int i = 3; i < cache.length; i++) {
 
 					if (i == cache.length - 1) {
@@ -205,12 +225,13 @@ public class SliceUploadClient {
 			if (file.length() > 0) {
 				fos.write("\r\n".getBytes());
 			}
-			fos.write((cacheInfo.getEventId() + " " + cacheInfo.getMd5() + " " + cacheInfo.getLastModified() + " " + cacheInfo.getPath().replace("\\", "/")).getBytes());
+			fos.write((cacheInfo.getEventId() + " " + cacheInfo.getMd5() + " " + cacheInfo.getLastModified() + " "
+					+ cacheInfo.getPath().replace("\\", "/")).getBytes());
 		}
 	}
 
 	public static void sliceFileUpload(String uploadUrl, File file, int[] unUploadedSliceIndexes,
-			SliceUploadFileInfo authInfo) {
+			SliceUploadFileInfo authInfo, String bizType) {
 
 		// 上传分片文件的线程池
 		ExecutorService service = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
@@ -222,7 +243,7 @@ public class SliceUploadClient {
 
 			for (int i = 0; i < unUploadedSliceIndexes.length; i++) {
 				FileUploadRunnable fileUploadRunnable = new FileUploadRunnable(uploadUrl, file,
-						unUploadedSliceIndexes[i], countDownLatch, authInfo);
+						unUploadedSliceIndexes[i], countDownLatch, authInfo, bizType);
 				service.submit(fileUploadRunnable);
 				System.out.println("第" + unUploadedSliceIndexes[i] + "块已经提交线程池。");
 			}
@@ -251,10 +272,16 @@ public class SliceUploadClient {
 		return null;
 	}
 
-	public static SliceUploadFileInfo getUploadAuth(String fileName, String fileMD5, long fileSize)
+	public static void cleanSlices(String eventId) throws ClientProtocolException, IOException {
+		CloseableHttpClient ht = HttpClientBuilder.create().build();
+		HttpPost post = new HttpPost(cleanSlicesUrl + eventId);
+		ht.execute(post);
+	}
+
+	public static SliceUploadFileInfo getUploadAuth(String vin, String fileName, String fileMD5, long fileSize)
 			throws ClientProtocolException, IOException {
 		CloseableHttpClient ht = HttpClientBuilder.create().build();
-		String param = fileMD5 + "/" + fileSize + "/" + fileName;
+		String param = vin + "/" + fileMD5 + "/" + fileSize + "/" + fileName;
 		HttpPost post = new HttpPost(uploadAuthUrl + param.replace(" ", "%20"));
 		HttpResponse res = ht.execute(post);
 		if (res.getStatusLine().getStatusCode() == 200) {
