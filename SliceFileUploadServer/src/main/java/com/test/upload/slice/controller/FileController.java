@@ -234,9 +234,11 @@ public class FileController {
 					}
 				}
 			}
+			//合并完成进行MD5校验
 			File mergedFile = new File(filePath + fileName);
 			String currentMD5 = MD5.getFileMD5String(mergedFile);
 			String cacheMD5 = redisTemplate.opsForHash().get(eventId, "fileMD5").toString();
+			//MD5校验失败，删除文件并报错
 			if (!cacheMD5.equals(currentMD5)) {
 				mergedFile.delete();
 				return "failure";
