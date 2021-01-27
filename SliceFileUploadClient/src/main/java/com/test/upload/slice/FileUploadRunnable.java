@@ -3,6 +3,7 @@ package com.test.upload.slice;
 import java.io.File;
 import java.io.FileInputStream;
 import java.nio.ByteBuffer;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 
 import org.apache.http.HttpResponse;
@@ -66,15 +67,19 @@ public class FileUploadRunnable implements Runnable {
 			System.out.println("len====" + len);
 			bb.flip();
 			System.out.println("limit====" + bb.limit());
-			byte[] resultBytes = new byte[bb.limit()];
-			bb.get(resultBytes);
+			String uuid = UUID.randomUUID().toString().replace("-", "");
+			long clientTimestamp = System.currentTimeMillis();
+			byte[] tmp = (uuid+clientTimestamp).getBytes();
+			byte[] resultBytes = new byte[bb.limit() + tmp.length];
+			bb.get(resultBytes, 0, bb.limit());
+			System.arraycopy(tmp, 0, resultBytes, bb.limit(), tmp.length);
 			AESUtil aes = new AESUtil();
 			byte[] res = aes.encrypt(resultBytes, Base64.decode(authInfo.getAeskey()));
+			
 			ByteArrayEntity byteArrayEntity = new ByteArrayEntity(res, ContentType.APPLICATION_OCTET_STREAM);
 
 			// 请求接收分段上传的地址
-			String u = url + index + "/" + res.length;
-			System.out.println(u);
+			String u = url + index + "/" + res.length + "/" + uuid + "/" + clientTimestamp;
 			HttpPost post = new HttpPost(u);
 
 			post.setHeader("eventId", authInfo.getEventId());

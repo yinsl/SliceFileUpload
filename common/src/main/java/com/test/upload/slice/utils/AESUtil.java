@@ -14,11 +14,11 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 /**
  * 
- * @ClassName:     AESUtil.java   
- * @Description:   AES128算法，因为java不支持PKCS7Padding，因此使用bouncycastle组件来实现
- * @author         尹顺林  
- * @version        V1.0     
- * @Date           2017年7月29日 上午9:30:45
+ * @ClassName: AESUtil.java
+ * @Description: AES128算法，因为java不支持PKCS7Padding，因此使用bouncycastle组件来实现
+ * @author 尹顺林
+ * @version V1.0
+ * @Date 2017年7月29日 上午9:30:45
  */
 public class AESUtil {
 	// 算法名称
@@ -31,40 +31,38 @@ public class AESUtil {
 	boolean isInited = false;
 
 	byte[] iv = "1234567890123456".getBytes();
-	
+
 	/**
 	 * @param length must be equal to 128, 192 or 256
 	 * @return
 	 * @throws Exception
 	 */
-	 public static byte[] generateDesKey(int length) throws Exception {
-	        //实例化  
-	        KeyGenerator kgen = null;
-	        kgen = KeyGenerator.getInstance("AES");
-	        //设置密钥长度  
-	        kgen.init(length);  
-	        //生成密钥  
-	        SecretKey skey = kgen.generateKey();  
-	        //返回密钥的二进制编码  
-	        return skey.getEncoded();  
-	    }
-	 
-	 /**
-		 * @param length must be equal to 128, 192 or 256
-		 * @return
-		 * @throws Exception
-		 */
-		 public static byte[] generateDesKey128() throws Exception {
-		        //实例化  
-		        KeyGenerator kgen = null;
-		        kgen = KeyGenerator.getInstance("AES");
-		        //设置密钥长度  
-		        kgen.init(128);  
-		        //生成密钥  
-		        SecretKey skey = kgen.generateKey();  
-		        //返回密钥的二进制编码  
-		        return skey.getEncoded();  
-		    }
+	public static byte[] generateKey(int length, String algorithmName) throws Exception {
+		// 实例化
+		KeyGenerator kgen = KeyGenerator.getInstance(algorithmName);
+		// 设置密钥长度
+		kgen.init(length);
+		// 生成密钥
+		SecretKey key = kgen.generateKey();
+		// 返回密钥的二进制编码
+		return key.getEncoded();
+	}
+
+	/**
+	 * @param length must be equal to 128, 192 or 256
+	 * @return
+	 * @throws Exception
+	 */
+	public static byte[] generateDesKey128() throws Exception {
+		// 实例化
+		KeyGenerator kgen = KeyGenerator.getInstance("AES");
+		// 设置密钥长度
+		kgen.init(128);
+		// 生成密钥
+		SecretKey skey = kgen.generateKey();
+		// 返回密钥的二进制编码
+		return skey.getEncoded();
+	}
 
 	public void init(byte[] keyBytes) {
 
@@ -91,28 +89,27 @@ public class AESUtil {
 
 	/**
 	 * 
-	* @Title:        encrypt    
-	* @Description:  加密 ，采用默认加密向量
-	* @param:        @param content 加密内容
-	* @param:        @param keyBytes 加密key
-	* @param:        @return       
-	* @return:       byte[]      加密后的字节数组
-	* @throws    
-	* @author        zekym   
-	* @Date          2017年7月29日 上午9:33:36
+	 * @Title: encrypt
+	 * @Description: 加密 ，采用默认加密向量
+	 * @param: @param  content 加密内容
+	 * @param: @param  keyBytes 加密key
+	 * @param: @return
+	 * @return: byte[] 加密后的字节数组
+	 * @throws @author zekym
+	 * @Date 2017年7月29日 上午9:33:36
 	 */
 	public byte[] encrypt(String content, byte[] keyBytes) {
-		return encrypt(content.getBytes(),keyBytes,iv);
+		return encrypt(content.getBytes(), keyBytes, iv);
 	}
-	
+
 	public byte[] encrypt(String content, byte[] keyBytes, byte[] iv) {
-		return encrypt(content.getBytes(),keyBytes,iv);
+		return encrypt(content.getBytes(), keyBytes, iv);
 	}
-	
+
 	public byte[] encrypt(byte[] content, byte[] keyBytes) {
-		return encrypt(content,keyBytes,iv);
+		return encrypt(content, keyBytes, iv);
 	}
-	
+
 	public byte[] encrypt(byte[] content, byte[] keyBytes, byte[] iv) {
 		byte[] encryptedText = null;
 		init(keyBytes);
@@ -129,12 +126,13 @@ public class AESUtil {
 	 * @Title: decrypt
 	 * @Description: 解密方法
 	 * @param encryptedData 要解密的字符串
-	 * @param keyBytes 解密密钥
+	 * @param keyBytes      解密密钥
 	 * @return
 	 */
 	public byte[] decrypt(byte[] encryptedData, byte[] keyBytes) {
 		return decrypt(encryptedData, keyBytes, iv);
 	}
+
 	/**
 	 * @Title: decrypt
 	 * @Description: 解密方法

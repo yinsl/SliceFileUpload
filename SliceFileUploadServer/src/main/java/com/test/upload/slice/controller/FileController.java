@@ -14,7 +14,7 @@ import javax.servlet.http.HttpServletRequest;
 import org.apache.commons.codec.binary.Base64;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
@@ -48,7 +48,9 @@ public class FileController {
 	private int intervalTime;
 
 	@Autowired
-	private RedisTemplate<String, ?> redisTemplate;
+	private StringRedisTemplate redisTemplate;
+	
+	private int SIXTY_SECONDS = 60 * 1000;
 
 	/**
 	 * 获取文件上传鉴权参数
@@ -83,15 +85,15 @@ public class FileController {
 
 		redisTemplate.opsForHash().put(eventId, "aesKey", base64AesKey);
 		redisTemplate.opsForHash().put(eventId, "token", token);
-		redisTemplate.opsForHash().put(eventId, "fileSize", fileSize);
+		redisTemplate.opsForHash().put(eventId, "fileSize", String.valueOf(fileSize));
 		redisTemplate.opsForHash().put(eventId, "fileMD5", fileMD5);
 		redisTemplate.opsForHash().put(eventId, "fileName", fileName);
-		redisTemplate.opsForHash().put(eventId, "sliceSize", sliceSize);
-		redisTemplate.opsForHash().put(eventId, "totalSlices", totalSlices);
-		redisTemplate.opsForHash().put(eventId, "intervalTime", intervalTime);
+		redisTemplate.opsForHash().put(eventId, "sliceSize", String.valueOf(sliceSize));
+		redisTemplate.opsForHash().put(eventId, "totalSlices", String.valueOf(totalSlices));
+		redisTemplate.opsForHash().put(eventId, "intervalTime", String.valueOf(intervalTime));
 		redisTemplate.opsForHash().put(eventId, "vin", vin);
 		//值为0表示上传中，值为1表示上传成功，值为2
-		redisTemplate.opsForHash().put(eventId, "uploadStatus", UploadStatus.UPLOADING);
+		redisTemplate.opsForHash().put(eventId, "uploadStatus", String.valueOf(UploadStatus.UPLOADING.getValue()));
 
 		redisTemplate.expire(eventId, tempFileCacheMillisecond, TimeUnit.SECONDS);
 
@@ -101,10 +103,24 @@ public class FileController {
 	/**
 	 * 处理分片文件上传
 	 */
-	@RequestMapping("/upload/{sliceIndex}/{encryptedSliceSize}")
+	@RequestMapping("/upload/{sliceIndex}/{encryptedSliceSize}/{uuid}/{clientTimestamp}")
 	public @ResponseBody String upload(@PathVariable("sliceIndex") Integer sliceIndex,
-			@PathVariable("encryptedSliceSize") int encryptedSliceSize, HttpServletRequest req)
+			@PathVariable("encryptedSliceSize") int encryptedSliceSize, HttpServletRequest req, 
+			@PathVariable("uuid") String uuid, @PathVariable("clientTimestamp") Long clientTimestamp)
 			throws InterruptedException {
+
+		long timestamp = System.currentTimeMillis();
+		if (timestamp - clientTimestamp.longValue() > SIXTY_SECONDS) {
+			return "这是一次重放攻击";
+		}
+		
+		boolean hasKey = redisTemplate.hasKey("replayAttack");
+		if (hasKey && redisTemplate.opsForSet().isMember("replayAttack", uuid)) {
+			return "这是一次重放攻击";
+		}
+		
+		redisTemplate.opsForSet().add("replayAttack", uuid);
+		redisTemplate.expire(uuid, tempFileCacheMillisecond, TimeUnit.SECONDS);
 
 		String eventId = req.getHeader("eventId");
 
@@ -151,7 +167,15 @@ public class FileController {
 			bb.get(slice);
 			// 对接收的数据进行AES解密
 			AESUtil aesUtil = new AESUtil();
-			byte[] result = aesUtil.decrypt(slice, aesKey);
+			//明文
+			byte[] tmp = aesUtil.decrypt(slice, aesKey);
+			//分片文件内容
+			byte[] result = new byte[tmp.length - 32];
+			System.arraycopy(tmp, 0, result, 0, result.length);
+			String rawUuid = new String(tmp, tmp.length - 32, 32);
+			if (!rawUuid.equals(uuid)) {
+				return "uuid被篡改";
+			}
 			// 明文写入临时文件
 			fos.write(result);
 		} catch (Exception e) {
@@ -249,7 +273,7 @@ public class FileController {
 		}
 		// 文件合并完毕，删除临时文件
 		cleanSlices(eventId);
-		redisTemplate.opsForHash().put(eventId, "uploadStatus", UploadStatus.SUCCESS);
+		redisTemplate.opsForHash().put(eventId, "uploadStatus", String.valueOf(UploadStatus.SUCCESS.getValue()));
 		return "success";
 	}
 
@@ -265,10 +289,16 @@ public class FileController {
 				temp.delete();
 			}
 		}
-		redisTemplate.opsForHash().put(eventId, "uploadStatus", UploadStatus.FAIL);
+		redisTemplate.opsForHash().put(eventId, "uploadStatus", String.valueOf(UploadStatus.FAIL.getValue()));
 		return "success";
 	}
 	
+	/**
+	 * 分片文件上传状态查询
+	 * 
+	 * @param eventId
+	 * @return
+	 */
 	@RequestMapping("/uploadStatus/{eventId}")
 	public String uploadStatus(String eventId) {
 		UploadStatus uploadStatus = (UploadStatus)redisTemplate.opsForHash().get(eventId, "uploadStatus");
